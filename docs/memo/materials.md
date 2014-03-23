@@ -1,3 +1,148 @@
+# 2014/3/23 ユースケース
+
+リポジトリの役割：CUD(Command) / Query
+
+エンティティクラスにActiveRecord
+```
+namespace UseCase;
+
+use Entity\User;
+use Dict\User as 登録済みユーザー;
+
+class 会員登録 extends UseCase
+{
+    public function __invoke(User $登録情報)
+    {
+        登録済みユーザー::add($登録情報);
+    }
+}
+
+```
+
+エンティティクラスがCollectionクラスを返す。Collection操作がUnitOfWorkに対応。
+```
+namespace UseCase;
+
+use Entity\User;
+use Dict\User as 登録済みユーザー;
+
+class 会員登録 extends UseCase
+{
+    public function __invoke(User $登録情報)
+    {
+        登録済みユーザー::collection()->add($登録情報);
+    }
+}
+
+```
+
+登録時のファクトリ（共通ファクトリ利用）
+
+```
+namespace UseCase;
+
+use Entity\User;
+use Dict\User as 登録済みユーザー;
+
+/**
+ * @UseFactory("UserFactory")
+ */
+class 会員登録 extends UseCase
+{
+    public function __invoke(User $登録情報)
+    {
+        登録済みユーザー::collection()->add($登録情報);
+    }
+}
+
+```
+
+登録時のファクトリ（その場定義）
+
+```
+namespace UseCase;
+
+use Entity\User;
+use Dict\User as 登録済みユーザー;
+
+class 会員登録 extends UseCase
+{
+    public function __invoke(User $登録情報)
+    {
+        登録済みユーザー::collection()->add($登録情報);
+    }
+
+    public function factory($data)
+    {
+        $entity = new 登録済みユーザー();
+        $entity->name = $data['name'];
+        // ...
+        
+        return $entity;
+    }
+}
+
+```
+
+
+
+
+
+# 2014/3/20 対象システム
+
+記述できる仕様の部品の妥当性を検証するために、サンプルシステムをいくつか用意しておく必要があるだろう。特にユースケースをどう記述できるのか考えなくてはならない。
+
+* 会員登録サンプル
+
+UserRegistrationService#register()
+
+```
+    public function register(User $user)
+    {
+        $user->setActivationKey(base64_encode($this->secureRandom->nextBytes(24)));
+        $user->setPassword($this->passwordEncoder->encodePassword($user->getPassword(), User::SALT));
+        $user->setRegistrationDate(new \DateTime());
+
+        $this->entityManager->getRepository('Example\UserRegistrationBundle\Domain\Data\User')->add($user);
+        $this->entityManager->flush();
+
+        $emailSent = $this->userTransfer->sendActivationEmail($user);
+        if (!$emailSent) {
+            throw new \UnexpectedValueException('アクティベーションメールの送信に失敗しました。');
+        }
+    }
+```
+
+こちらのユースケース（シナリオで）は、
+* メインコース：ユーザーエンティティの登録
+* 補助コース：メールの送信
+となっている。
+
+
+
+
+UserRegistrationService#activate()
+
+```
+    public function activate($activationKey)
+    {
+        $user = $this->entityManager->getRepository('Example\UserRegistrationBundle\Domain\Data\User')->findOneByActivationKey($activationKey);
+        if (is_null($user)) {
+            throw new \UnexpectedValueException('アクティベーションキーが見つかりません。');
+        }
+
+        if (!is_null($user->getActivationDate())) {
+            throw new \UnexpectedValueException('ユーザーはすでに有効です。');
+        }
+
+        $user->setActivationDate(new \DateTime());
+        $this->entityManager->flush();
+    }
+```
+
+
+
+
 # 2014/3/19 REA
 
 REA（Resource、Event、Agent）会計システムのための分析フレームワーク
